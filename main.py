@@ -1,81 +1,104 @@
-from datetime import datetime
-from random import randint
-from fastapi import FastAPI, APIRouter, HTTPException, Response
+from ast import TypeVar
+from contextlib import asynccontextmanager
+from http.client import HTTPException
+from annotated_types import T
+from fastapi import Depends, FastAPI
+from datetime import datetime, timezone
+from typing import Annotated, Generic, TypeVar
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 from prometheus_fastapi_instrumentator import Instrumentator
-from typing import Any
+from pydantic import BaseModel
 
-# 1. Initialize FastAPI WITHOUT the root_path
-app = FastAPI()
+app = FastAPI(root_path="/api/v1")
 Instrumentator().instrument(app).expose(app)
 
+sqlite_file_name = "database.db"
+sqlite_url = f"sqlite:///{sqlite_file_name}"
 
-# 2. Set up a router to handle your /api/v1 prefix
-router = APIRouter(prefix="/api/v1")
+connect_args = {"check_same_thread": False}
+engine = create_engine(sqlite_url, connect_args=connect_args)
 
-data: Any = [
-    {
-        "campaign_id": 1,
-        "name": "Summer Launch",
-        "due_date": datetime.now(),
-        "created_at": datetime.now()
-    },
-    {
-        "campaign_id": 2,
-        "name": "Black Friday",
-        "due_date": datetime.now(),
-        "created_at": datetime.now()
-    }
-]
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
 
-# 3. Attach all endpoints to the @router instead of @app
+def get_session():
+    with Session(engine) as session:
+        yield session
 
-@router.get("/")
-async def root():
-    return {"message": "Hello world!"}
+SessionDp = Annotated[Session, Depends(get_session)]
 
-@router.get("/campaigns")
-async def read_campaigns():
-    return {"campaigns": data}
+class Campaign(SQLModel, table=True):
+    campaign_id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    due_date: datetime | None = Field(default=None, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
 
-@router.get("/campaigns/{id}")
-async def read_campaign(id: int):
-    for campaign in data:
-        if campaign.get("campaign_id") == id:
-            return {"campaign": campaign}
-    raise HTTPException(status_code=404)
+class CampaignCreate(SQLModel):
+    name: str
+    due_date: datetime | None = None
 
-@router.post("/campaigns", status_code=201)
-async def create_campaign(body: dict[str, Any]):
-    new: Any = {
-        "campaign_id": randint(100, 1000),
-        "name": body.get("name"),
-        "due_date": body.get("due_date"),
-        "created_at": datetime.now()
-    }
-    data.append(new)
-    return {"campaign": new}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: migrate + seed
+    create_db_and_tables()
+    with Session(engine) as session:
+        if not session.exec(select(Campaign)).first():
+            session.add_all([
+                Campaign(name="Summer Launch", due_date=datetime.now()),
+                Campaign(name="Black Friday", due_date=datetime.now()),
+            ])
+            session.commit()
+    yield
 
-@router.put("/campaigns/{id}")
-async def update_campaign(id: int, body: dict[str, Any]):
-    for index, campaign in enumerate(data):
-        if campaign.get("campaign_id") == id:
-            updated: Any = {
-                "campaign_id": id,
-                "name": body.get("name"),
-                "due_date": body.get("due_date"),
-                "created_at": campaign.get("created_at")
-            }
-            data[index] = updated
-            return {"campaign": updated}
-    raise HTTPException(status_code=404)
-    
-@router.delete("/campaigns/{id}", status_code=204)
-async def delete_campaign(id: int):
-    for index, campaign in enumerate(data):
-        if campaign.get("campaign_id") == id:
-            data.pop(index)
-            return Response(status_code=204)
-    raise HTTPException(status_code=404)
 
-# 4. Include the router in the main application
-app.include_router(router)
+app = FastAPI(root_path="/api/v1", lifespan=lifespan)
+
+
+T = TypeVar("T")
+class Response(BaseModel, Generic[T]):
+    data : T
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/campaigns", response_model=Response[list[Campaign]])
+async def read_campaigns(session: SessionDp):
+    campaigns = session.exec(select(Campaign)).all()
+    return {"data": campaigns}
+
+@app.get("/campaigns/{id}", response_model=Response[Campaign])
+async def read_campaign(id: int, session: SessionDp):
+    campaign = session.get(Campaign, id)
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    return {"data": campaign}
+
+@app.post("/campaigns", response_model=Response[Campaign], status_code=201)
+async def create_campaign(campaign: CampaignCreate, session: SessionDp):
+    db_campaign = Campaign.model_validate(campaign)
+    session.add(db_campaign)
+    session.commit()
+    session.refresh(db_campaign)
+    return {"data": db_campaign}
+
+@app.put("/campaigns/{id}", response_model=Response[Campaign])
+async def update_campaign(id: int, campaign: CampaignCreate, session: SessionDp):
+    data = session.get(Campaign, id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    data.name = campaign.name
+    data.due_date = campaign.due_date
+    session.add(data)
+    session.commit()
+    session.refresh(data)
+    return {"data": data}
+
+@app.delete("/campaigns/{id}", status_code=204)
+async def delete_campaign(id: int, session: SessionDp):
+    data = session.get(Campaign, id)
+    if not data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    session.delete(data)
+    session.commit()
+    return None
