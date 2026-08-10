@@ -8,15 +8,13 @@ from typing import Annotated, Generic, TypeVar
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
+import os
 
 app = FastAPI(root_path="/api/v1")
 Instrumentator().instrument(app).expose(app)
 
-sqlite_file_name = "database.db"
-sqlite_url = f"sqlite:///{sqlite_file_name}"
-
-connect_args = {"check_same_thread": False}
-engine = create_engine(sqlite_url, connect_args=connect_args)
+DATABASE_URL = os.environ.get("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
