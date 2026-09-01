@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import HTTPException
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from datetime import datetime, timezone
 from typing import Annotated, Generic, TypeVar
 from sqlmodel import Field, Session, SQLModel, create_engine, select
@@ -8,10 +7,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 import os
 
-app = FastAPI(root_path="/api/v1", lifespan=lifespan)
-Instrumentator().instrument(app).expose(app)
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+pg8000://appuser:apppass@localhost:5432/telemetry")
 engine = create_engine(DATABASE_URL)
 
 def create_db_and_tables():
@@ -47,9 +43,13 @@ async def lifespan(app: FastAPI):
     yield
 
 
+app = FastAPI(root_path="/api/v1", lifespan=lifespan)
+Instrumentator().instrument(app).expose(app)
+
+
 T = TypeVar("T")
 class Response(BaseModel, Generic[T]):
-    data : T
+    data: T
 
 @app.get("/health")
 async def health():
