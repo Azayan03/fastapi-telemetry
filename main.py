@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         if not session.exec(select(Campaign)).first():
             session.add_all([
                    Campaign(name="Summer Launch", due_date=datetime.now(timezone.utc)),
-                Campaign(name="Black Friday", due_date=datetime.now()),
+                Campaign(name="Black Friday", due_date=datetime.now(timezone.utc)),
             ])
             session.commit()
     yield
