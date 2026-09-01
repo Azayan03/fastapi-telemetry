@@ -24,7 +24,6 @@ This starts the whole stack — the API, the database, and Adminer — together.
 git clone https://github.com/Azayan03/fastapi-telemetry.git
 cd fastapi-telemetry
 docker compose up --build
-
 ```
 
 First run takes longer while the `api` image builds and dependencies install. Subsequent runs reuse the cached layer and start much faster.
@@ -37,17 +36,28 @@ To run in the background, add `-d`:
 
 ```bash
 docker compose up -d --build
-
 ```
 
 To stop everything:
 
 ```bash
 docker compose down
-
 ```
 
 Add `-v` to also wipe the database volume (`docker compose down -v`).
+
+### Verifying it's up
+
+```bash
+docker compose ps
+```
+
+The `api` service should show `8000->8000` under `PORTS`. If it only shows `8000/tcp` with no host-side mapping, the port isn't published and `localhost:8000` won't be reachable — check the `ports:` entry for `api` in `docker-compose.yml`; it should read `"8000:8000"`.
+
+Once it's up:
+
+* `http://localhost:8000/docs` — interactive API docs (Swagger UI)
+* `http://localhost:8000/health` — health check
 
 ## Running locally without Docker
 
@@ -56,17 +66,19 @@ Useful for fast iteration while developing. You'll still need Postgres running s
 ```bash
 git clone https://github.com/Azayan03/fastapi-telemetry.git
 cd fastapi-telemetry
+python -m venv .venv
+source .venv/bin/activate   # fish shell: source .venv/bin/activate.fish
 pip install -r requirements.txt
 docker compose up db
-
 ```
+
+> On distros with [PEP 668](https://peps.python.org/pep-0668/) "externally managed" Python (e.g. Arch, recent Debian/Ubuntu), a plain `pip install` outside a venv will fail with `externally-managed-environment`. Always install into a virtual environment as shown above rather than passing `--break-system-packages`.
 
 Then point the app at it and run it:
 
 ```bash
 export DATABASE_URL="postgresql+pg8000://appuser:apppass@localhost:5432/telemetry"
 uvicorn main:app --reload
-
 ```
 
 Note the hostname here is `localhost`, not `db` — `db` only resolves as a hostname from inside another container on the same Docker network. When the API itself runs via Compose, it connects to Postgres using `db` as the host instead.
