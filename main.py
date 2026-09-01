@@ -1,11 +1,12 @@
+import os
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI, HTTPException
 from datetime import datetime, timezone
 from typing import Annotated, Generic, TypeVar
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+
+from fastapi import Depends, FastAPI, HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
-import os
+from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+pg8000://appuser:apppass@localhost:5432/telemetry")
 engine = create_engine(DATABASE_URL)
@@ -36,7 +37,7 @@ async def lifespan(app: FastAPI):
     with Session(engine) as session:
         if not session.exec(select(Campaign)).first():
             session.add_all([
-                Campaign(name="Summer Launch", due_date=datetime.now()),
+                   Campaign(name="Summer Launch", due_date=datetime.now(timezone.utc)),
                 Campaign(name="Black Friday", due_date=datetime.now()),
             ])
             session.commit()
@@ -94,4 +95,3 @@ async def delete_campaign(id: int, session: SessionDp):
         raise HTTPException(status_code=404, detail="Campaign not found")
     session.delete(data)
     session.commit()
-    return None

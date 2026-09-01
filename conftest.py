@@ -7,9 +7,10 @@ Each test gets a fresh in-memory SQLite database, so:
   - tests never depend on execution order or leftover rows from prior runs
 """
 import pytest
-from sqlmodel import SQLModel, Session, create_engine
-from sqlmodel.pool import StaticPool
 from fastapi.testclient import TestClient
+from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel.pool import StaticPool
+
 from main import app, get_session
 
 
