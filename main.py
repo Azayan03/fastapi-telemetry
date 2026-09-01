@@ -1,7 +1,5 @@
-from ast import TypeVar
 from contextlib import asynccontextmanager
-from http.client import HTTPException
-from annotated_types import T
+from fastapi import HTTPException
 from fastapi import Depends, FastAPI
 from datetime import datetime, timezone
 from typing import Annotated, Generic, TypeVar
@@ -10,7 +8,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 import os
 
-app = FastAPI(root_path="/api/v1")
+app = FastAPI(root_path="/api/v1", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -47,9 +45,6 @@ async def lifespan(app: FastAPI):
             ])
             session.commit()
     yield
-
-
-app = FastAPI(root_path="/api/v1", lifespan=lifespan)
 
 
 T = TypeVar("T")
