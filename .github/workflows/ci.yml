@@ -35,3 +35,24 @@ jobs:
           pip install pytest
       - name: Run tests
         run: pytest
+  
+  scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Dependency vulnerability scan
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+      - name: Filesystem scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          severity: 'CRITICAL,HIGH'
