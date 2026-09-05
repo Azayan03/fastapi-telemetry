@@ -1,6 +1,6 @@
 # FastAPI Telemetry
 
-A tiny FastAPI service demonstrating a REST API with built-in observability via Prometheus metrics.
+A small FastAPI service demonstrating a REST API with built-in observability via Prometheus metrics.
 
 ## Features
 
