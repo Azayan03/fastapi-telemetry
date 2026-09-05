@@ -96,6 +96,68 @@ The API will be available at `http://localhost:8000/api/v1`.
 | PUT | `/campaigns/{id}` | Update an existing campaign |
 | DELETE | `/campaigns/{id}` | Delete a campaign |
 
+## Reverse proxy, load balancing, and HTTPS (Nginx)
+
+The stack can run three load-balanced instances of the API (`api1`, `api2`, `api3`) behind an Nginx reverse proxy, which also terminates TLS:
+
+```
+Browser --[HTTPS]--> Nginx --[HTTP, internal Docker network]--> api1 / api2 / api3
+```
+
+* Nginx's `upstream` block pools the three instances and round-robins requests across them.
+* Nginx handles TLS termination — it accepts encrypted HTTPS, decrypts it, and forwards plain HTTP internally to whichever `apiN` instance is next in rotation. The backend instances never see encrypted traffic directly.
+* Plain HTTP requests are redirected (301) to HTTPS.
+
+Bring it up the same way as the base stack:
+
+```bash
+docker compose up -d --build
+```
+
+Access points:
+
+* `http://localhost:8000/docs` — redirects to HTTPS
+* `https://localhost:8443/docs` — interactive docs, served through Nginx and load-balanced across all three instances
+* `https://localhost:8443/health` — includes the responding container's instance ID, useful for confirming load balancing is actually distributing requests
+
+### Verifying load balancing
+
+Sequential single requests can misleadingly appear to always hit the same instance — Nginx tracks round-robin state per worker process, and slow one-at-a-time requests tend to land on whichever worker is idle. Send concurrent requests instead:
+
+```fish
+for i in (seq 1 20)
+    curl -sk https://localhost:8443/health &
+end
+wait
+```
+
+You should see multiple distinct `instance` IDs across the responses.
+
+### Local dev HTTPS vs. real deployment
+
+This project currently uses a **self-signed certificate** for local HTTPS — sufficient to develop and test TLS termination, but not something a browser will trust by default (expect a certificate warning; that's expected and safe to bypass locally with `curl -k` or a manual browser exception).
+
+| | Local dev (current) | Real deployment (e.g. AWS) |
+| --- | --- | --- |
+| Certificate | Self-signed, generated once via `openssl` | Issued by a trusted CA (e.g. Let's Encrypt via Certbot), or managed by a cloud load balancer (e.g. AWS ACM behind an ALB) |
+| Domain | `localhost` — can't be verified by a real CA | A real, DNS-resolvable domain the CA can confirm you own |
+| Trust | Browsers show a warning; you accept it manually | Trusted automatically, no warning |
+| Ports | Nonstandard host ports (`8000`/`8443`) to avoid needing elevated privileges locally | Standard ports (`80`/`443`), since the server owns the whole host/instance |
+| HTTP→HTTPS redirect | Must hardcode the nonstandard HTTPS port (`https://localhost:8443$request_uri`) since `$host` carries no port info | Works with the default `https://$host$request_uri`, no hardcoding needed, since 443 is implicit |
+| Renewal | N/A — cert is just regenerated manually if needed | Must be automated (Let's Encrypt certs expire every 90 days; Certbot or the cloud provider typically handles renewal) |
+
+Generating the local self-signed cert (already done for this repo, kept here for reference/regeneration):
+
+```bash
+mkdir -p nginx/certs
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout nginx/certs/nginx-privatekey.key \
+  -out nginx/certs/nginx-cert.crt \
+  -subj "/CN=localhost"
+```
+
+`nginx/certs/` is gitignored — regenerate locally rather than relying on a committed cert/key.
+
 ## Metrics
 
 Prometheus metrics are automatically exposed at `/metrics`, ready to be scraped by a Prometheus server.
