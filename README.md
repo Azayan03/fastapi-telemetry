@@ -1,6 +1,6 @@
 # FastAPI Telemetry
 
-A tiny FastAPI service demonstrating a REST API with built-in observability via Prometheus metrics.
+A small FastAPI service demonstrating a REST API with built-in observability via Prometheus metrics.
 
 ## Features
 
@@ -26,7 +26,7 @@ cd fastapi-telemetry
 docker compose up --build
 ```
 
-First run takes longer while the `api` image builds and dependencies install. Subsequent runs reuse the cached layer and start much faster.
+First run takes a bit longer while the `api` image builds and dependencies install. Subsequent runs reuse the cached layer and start much faster.
 
 * **API (`api`)**: The FastAPI app, available at `http://localhost:8000/api/v1`.
 * **Database (`db`)**: A PostgreSQL 16 instance accessible on port `5432`. It automatically provisions a database named `telemetry` (User: `appuser`, Password: `apppass`) and persists data via a local Docker volume.
