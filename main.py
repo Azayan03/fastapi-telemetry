@@ -54,7 +54,7 @@ class Response(BaseModel, Generic[T]):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
+    return {"status": "ok", "instance": os.getenv("HOSTNAME")}
 
 @app.get("/campaigns", response_model=Response[list[Campaign]])
 async def read_campaigns(session: SessionDp):
