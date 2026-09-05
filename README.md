@@ -151,7 +151,7 @@ Generating the local self-signed cert (already done for this repo, kept here for
 ```bash
 mkdir -p nginx/certs
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout nginx/certs/nginx-private.key \
+  -keyout nginx/certs/nginx-privatekey.key \
   -out nginx/certs/nginx-cert.crt \
   -subj "/CN=localhost"
 ```
@@ -166,8 +166,10 @@ Prometheus metrics are automatically exposed at `/metrics`, ready to be scraped 
 
 Tests use an in-memory SQLite database (via `StaticPool`) with FastAPI's `get_session` dependency overridden — no real Postgres connection needed to run the suite.
 
+Test/lint/scan tooling (`pytest`, `ruff`, `pip-audit`) lives in `requirements-dev.txt`, separate from the runtime dependencies in `requirements.txt`, so the production Docker image doesn't carry tooling it never uses.
+
 ```bash
-pip install pytest
+pip install -r requirements-dev.txt
 pytest
 ```
 
@@ -185,7 +187,7 @@ Every push and pull request against `main` runs through a GitHub Actions pipelin
 3. **Scan** — [`pip-audit`](https://pypi.org/project/pip-audit/) checks dependencies in `requirements.txt` for known CVEs; [Trivy](https://aquasecurity.github.io/trivy/) scans the filesystem for vulnerabilities and accidental secrets.
 4. **Build** — builds the Docker image and pushes it to Docker Hub.
 
-Each stage only runs if the previous one passes, so a broken lint or failing test stops the pipeline before an image is ever built or pushed.
+Each stage only runs if the previous one passes, so a broken lint or failing test stops the pipeline before an image is ever built or pushed. The lint, test, and scan stages install `requirements-dev.txt` (which pulls in `requirements.txt` plus `ruff`/`pytest`/`pip-audit`); the build stage's Docker image only ever installs `requirements.txt`.
 
 ## License
 
