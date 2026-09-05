@@ -106,3 +106,27 @@ Local Git's `init.defaultBranch` was still `master` (pre-2020 default), while Gi
 
 - Fix applied: `git checkout -b main origin/main` (create local `main`, tracking remote), `git merge master`, `git push origin main`, then delete the now-redundant branch both locally and remotely (`git branch -d master`, `git push origin --delete master`).
 - Prevention: `git config --global init.defaultBranch main` — one-time global setting so every future `git init` starts on `main`, matching GitHub. Doesn't affect `git clone`, which always follows the remote's actual default branch regardless of this setting.
+
+## GitHub Actions workflow file only exists on GitHub until you `git pull`
+
+Created `.github/workflows/ci.yml` via GitHub's browser UI (not from the local machine). It committed fine on GitHub's remote, but the local clone had no idea it existed — `.github/workflow` looked completely absent locally. Any file created through the website is just a normal commit on the remote; it doesn't materialize locally until pulled.
+
+- Fix: `git pull`, then confirm with `ls -la .github/workflows/`.
+
+## Local tools installed in CI don't exist on your machine, and vice versa
+
+Installed `ruff` inside the GitHub Actions runner (a temporary, disposable VM) as part of the `lint` job. Assumed it would then be available locally to run `ruff check . --fix` — it wasn't (`fish: Unknown command: ruff`). CI's environment and your local machine are two completely separate machines; nothing installed in one carries over to the other.
+
+- Fix: `pip install ruff` locally as a separate step, inside the project's venv.
+
+## `pip-audit` and Trivy are two different checks in one `scan` job — one failing stops the other from running
+
+`scan` job ran `pip-audit` first, then Trivy's filesystem scan as a second step. `pip-audit` failed on a real CVE (`pg8000` outdated), which halted the job — Trivy's step never executed at all that run. A job showing green after a re-run doesn't confirm every step in it passed if you only skimmed the top-level status; check each individual step in the Actions log.
+
+- Fix: `pip-audit` found `pg8000 1.31.1` had a known vulnerability (`PYSEC-2026-1766`), fixed in `1.31.5`. Bumped the pin in `requirements.txt`, reinstalled locally, confirmed the app still ran, then re-pushed.
+
+## Docker Hub access token needs "Read & Write" scope, not "Read-only" or "Read, Write & Delete"
+
+Read-only tokens can't `docker push` (build job would fail at the push step). Read/Write/Delete is more permission than a CI pipeline that only builds and pushes needs — no reason to give it delete access to the registry.
+
+- Fix: generate the Docker Hub access token with **Read & Write** scope specifically, store as `DOCKERHUB_TOKEN` GitHub secret (paired with `DOCKERHUB_USERNAME`) — exact name match required, case-sensitive, between the secret name in GitHub Settings and the `secrets.X` reference in the YAML.
