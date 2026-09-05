@@ -193,3 +193,32 @@ Root `requirements.txt` had 41 entries — including packages `main.py` never im
 
 - Fix: trimmed to the 6 packages `main.py`/`Dockerfile` actually need: `fastapi`, `uvicorn`, `sqlmodel`, `pydantic`, `prometheus-fastapi-instrumentator`, `pg8000`.
 - Verify after trimming: rebuild and run the full test suite — a trim based on reading imports, not a full dependency-tree trace, so it's worth confirming nothing broke.
+
+
+## Editing a config file doesn't take effect until Nginx actually reloads
+
+Believed a fix was applied to `nginx/default.conf` (redirect URL, port hardcode) multiple times without actually confirming it — including once where the edit was made, tested successfully, then reverted, but the *container* kept serving the previous (working) config because Nginx only reads its config at container startup/reload, not on every request. `cat`ing the file and `curl -v`ing the live behavior gave two different, contradictory answers until both were checked together.
+
+- Fix/practice: after any Nginx config edit, `docker compose restart nginx` (or `nginx -s reload`), then verify with `curl -v` directly — never trust "it should be applied" or a browser check alone.
+- Lesson: what's on disk, what's loaded in the running container, and what the browser is showing you can all disagree at the same time. `curl -v` is ground truth; `cat` confirms the file; neither alone is sufficient.
+
+## Browsers cache 301 (permanent) redirects aggressively — stale cache outlives the fix
+
+After correctly fixing the HTTP→HTTPS redirect (hardcoded port), a normal browser window kept showing old, broken behavior while `curl -v` proved the server was already returning the fixed response — and later, the reverse happened: the browser kept "working" via a stale cached redirect from an earlier correct config, while the actual file/server had regressed to the broken version. In both directions, the browser's behavior for that URL was disconnected from what the server was currently doing.
+
+- Fix/verification: test in an incognito/private window (or with DevTools "Disable cache" on) to bypass browser cache entirely — this is what exposed the discrepancy both times.
+- Longer-term fix: switched the redirect from `301` to `302` during active local development, since `302` (temporary) is cached far less aggressively than `301` (permanent) — trading strict semantic correctness for not fighting the browser cache while the config is still changing. Worth reverting to `301` once the config is stable and no longer being iterated on.
+
+## Stale remote-tracking branches accumulate locally after deleting on GitHub
+
+Deleting a branch on GitHub (via the "Delete branch" button after a PR merge) doesn't automatically clean up the local reference to it (`origin/<branch-name>`) — it lingers in `git branch -a` until explicitly pruned.
+
+- Fix: `git fetch --prune` cleans it up manually.
+- Permanent fix: `git config --global fetch.prune true` — one-time global setting so every future `git fetch`/`git pull` auto-prunes stale remote-tracking branches, no extra step needed going forward.
+
+## GitHub branch protection: repo admins/owners bypass rules by default
+
+Enabled "require pull request" and "require status checks" on `main`, then pushed directly to `main` as a test — it succeeded instead of being rejected. GitHub's response included `remote: Bypassed rule violations for refs/heads/main`, revealing that repo owners/admins are exempt from branch protection rules unless explicitly told otherwise.
+
+- Fix: enabled "Do not allow bypassing the above settings" in the branch protection rule — closes the admin-exemption loophole so the rule applies uniformly, matching how a real team would want it enforced.
+- Verified fix by re-attempting a direct push to `main` afterward and confirming it was hard-rejected this time.
