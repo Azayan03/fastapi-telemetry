@@ -193,5 +193,3 @@ Root `requirements.txt` had 41 entries — including packages `main.py` never im
 
 - Fix: trimmed to the 6 packages `main.py`/`Dockerfile` actually need: `fastapi`, `uvicorn`, `sqlmodel`, `pydantic`, `prometheus-fastapi-instrumentator`, `pg8000`.
 - Verify after trimming: rebuild and run the full test suite — a trim based on reading imports, not a full dependency-tree trace, so it's worth confirming nothing broke.
-
-
