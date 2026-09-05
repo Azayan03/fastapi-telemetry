@@ -100,6 +100,31 @@ The API will be available at `http://localhost:8000/api/v1`.
 
 Prometheus metrics are automatically exposed at `/metrics`, ready to be scraped by a Prometheus server.
 
+## Running tests
+
+Tests use an in-memory SQLite database (via `StaticPool`) with FastAPI's `get_session` dependency overridden — no real Postgres connection needed to run the suite.
+
+```bash
+pip install pytest
+pytest
+```
+
+> `main.py` creates its database engine at import time from `DATABASE_URL`. If that variable isn't set, `pytest` will fail during test collection rather than during a test itself. Export a placeholder before running if needed:
+> ```bash
+> export DATABASE_URL="postgresql+pg8000://appuser:apppass@localhost:5432/telemetry"
+> ```
+
+## CI/CD
+
+Every push and pull request against `main` runs through a GitHub Actions pipeline (`.github/workflows/ci.yml`) with four sequential stages:
+
+1. **Lint** — [`ruff`](https://docs.astral.sh/ruff/) checks code style and correctness.
+2. **Test** — the `pytest` suite described above.
+3. **Scan** — [`pip-audit`](https://pypi.org/project/pip-audit/) checks dependencies in `requirements.txt` for known CVEs; [Trivy](https://aquasecurity.github.io/trivy/) scans the filesystem for vulnerabilities and accidental secrets.
+4. **Build** — builds the Docker image and pushes it to Docker Hub.
+
+Each stage only runs if the previous one passes, so a broken lint or failing test stops the pipeline before an image is ever built or pushed.
+
 ## License
 
 No license specified.
