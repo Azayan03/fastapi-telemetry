@@ -130,3 +130,46 @@ Installed `ruff` inside the GitHub Actions runner (a temporary, disposable VM) a
 Read-only tokens can't `docker push` (build job would fail at the push step). Read/Write/Delete is more permission than a CI pipeline that only builds and pushes needs — no reason to give it delete access to the registry.
 
 - Fix: generate the Docker Hub access token with **Read & Write** scope specifically, store as `DOCKERHUB_TOKEN` GitHub secret (paired with `DOCKERHUB_USERNAME`) — exact name match required, case-sensitive, between the secret name in GitHub Settings and the `secrets.X` reference in the YAML.
+
+## Bind-mounting a file that doesn't exist yet creates a directory instead
+
+Referenced `./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro` in a `volumes:` entry before the file actually existed on disk. Docker Compose auto-creates the mount source/target if missing — but since there was no file yet, it guessed wrong and created `default.conf` as a **directory**, owned by `root` (the Docker daemon), which then couldn't be deleted with a normal `rm`.
+
+- Fix: `sudo rm -rf ./nginx/default.conf`, then actually create the file (`nano nginx/default.conf`) *before* running `docker compose up` again. Verify with `ls -la nginx/` — should show `-rw-...`, not `drwx...`.
+- Lesson: always create bind-mounted config files (Nginx configs, `.env`, certs) before the first `docker compose up` that references them.
+
+## `upstream` name and `proxy_pass` target must match exactly
+
+Defined `upstream fastapi_backend { ... }` but wrote `proxy_pass http://fastapi_telemetry_backend;` (extra `telemetry_` from a copy-paste/autocomplete slip). Nginx failed to start with `host not found in upstream "fastapi_telemetry_backend"` — it's not resolving a real hostname there, it's looking for an `upstream` block by that literal label, and the label is arbitrary but must be identical in both places.
+
+- Fix: match the name exactly in both the `upstream` declaration and every `proxy_pass` referencing it.
+
+## `worker_processes` / `events {}` don't belong in a `conf.d/*.conf` file
+
+Added `worker_processes auto;` and an `events {}` block to `nginx/default.conf`, which is mounted to `/etc/nginx/conf.d/default.conf` — a file that's `include`d *inside* the main `nginx.conf`'s `http {}` block. Those two directives are top-level/main-config-only and aren't allowed inside `http {}`, so Nginx failed with `"worker_processes" directive is not allowed here`.
+
+- Fix: removed both — the base `nginx:latest` image's default `nginx.conf` already sets sane values. To actually override them, you'd need to mount a full custom `nginx.conf` to `/etc/nginx/nginx.conf` (a separate file/mount), not put them in `conf.d/`.
+
+## SSL cert file path/name must exactly match the volume mount and `ssl_certificate*` lines
+
+Cert/key files (`nginx-cert.crt`, `nginx-privatekey.key`) existed directly in `nginx/`, but the volume mount (`./nginx/certs:/etc/nginx/certs:ro`) and `default.conf`'s `ssl_certificate`/`ssl_certificate_key` both expected them under `nginx/certs/` with specific filenames. Nginx failed with `cannot load certificate ... No such file or directory` until all three (actual file location, volume mount source, and the filename referenced in `default.conf`) lined up exactly.
+
+- Fix: moved files into `nginx/certs/`, updated `ssl_certificate`/`ssl_certificate_key` to the real filenames/extensions (`.crt` / `.key`, not `.pem` — don't copy a placeholder extension from an example without checking your actual files).
+
+## HTTP→HTTPS redirect breaks when host ports are remapped (local dev only)
+
+Added `return 301 https://$host$request_uri;` to redirect plain HTTP to HTTPS. Locally, Nginx's host ports were mapped to non-standard `8000` (HTTP) and `8443` (HTTPS) instead of `80`/`443` — but `$host` doesn't carry port info, so the redirect always points at the *default* HTTPS port 443, not 8443. Visiting `http://localhost:8000/docs` redirected to `https://localhost/docs` (implicit port 443), which nothing was listening on, making the whole app look broken even though every container was `Up`.
+
+- Fix (local dev only): hardcode the actual host HTTPS port into the redirect — `return 301 https://localhost:8443$request_uri;` — with a comment noting it's a local-only workaround.
+- This isn't needed in real deployments; see README's local-vs-production HTTPS section for why.
+
+## Nginx round-robin state is per worker process, not global
+
+Sent 10 sequential `curl` requests (one at a time) to a load-balanced endpoint and got the *same* backend instance ID every time, despite 3 upstream servers being configured correctly. Cause: Nginx spawns one worker process per CPU core (`worker_processes auto`), and each worker keeps its **own independent** round-robin counter. Slow, one-at-a-time requests tend to get picked up by whichever worker is idle, and each idle worker's counter is often still at position 0 — so it looks like load balancing isn't working when it actually is.
+
+- Fix/verification: fire requests **concurrently** instead (fish: `for i in (seq 1 20); curl -s $URL &; end; wait`) so several land on the same worker in quick succession — this reliably showed all 3 backend IDs.
+- Lesson: a single-threaded/sequential test loop is not a reliable way to verify Nginx load balancing; concurrency is required to see the rotation.
+
+## Fish shell doesn't support bash's `{1..N}` range or `do...done` for loops
+
+Bash's `for i in {1..10}; do ...; done` doesn't work in fish. Fish syntax is `for i in (seq 1 10) ... end` — no `do`, `end` instead of `done`, and `(seq 1 10)` instead of `{1..10}`. (Extends the earlier heredoc gotcha — fish diverges from bash/zsh in several common scripting idioms, not just heredocs.)
