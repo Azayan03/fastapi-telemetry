@@ -10,6 +10,7 @@ A small FastAPI service demonstrating a REST API with built-in observability via
 * Seeded sample data on startup
 * Health check endpoint
 * Fully containerized — API, database, and DB admin UI all run via Docker Compose
+* Docker image runs as a dedicated non-root user, not `root`
 
 ## Requirements
 
@@ -18,7 +19,7 @@ A small FastAPI service demonstrating a REST API with built-in observability via
 
 ## Running with Docker (recommended)
 
-This starts the whole stack — the API, the database, and Adminer — together.
+This starts the whole stack — three load-balanced API instances, the database, Adminer, and Nginx (reverse proxy, load balancing, HTTPS) — together.
 
 ```bash
 git clone https://github.com/Azayan03/fastapi-telemetry.git
@@ -26,9 +27,10 @@ cd fastapi-telemetry
 docker compose up --build
 ```
 
-First run takes a bit longer while the `api` image builds and dependencies install. Subsequent runs reuse the cached layer and start much faster.
+First run takes a bit longer while the `api1`/`api2`/`api3` images build and dependencies install. Subsequent runs reuse the cached layer and start much faster.
 
-* **API (`api`)**: The FastAPI app, available at `http://localhost:8000/api/v1`.
+* **API (`api1`, `api2`, `api3`)**: Three identical FastAPI instances, load-balanced by Nginx. They don't publish a host port individually by design — all traffic goes through Nginx (see below).
+* **Nginx (`nginx`)**: Reverse proxy, load balancer, and TLS termination in front of the three API instances. This is the actual entry point — see [Reverse proxy, load balancing, and HTTPS](#reverse-proxy-load-balancing-and-https-nginx) below for details and access URLs.
 * **Database (`db`)**: A PostgreSQL 16 instance accessible on port `5432`. It automatically provisions a database named `telemetry` (User: `appuser`, Password: `apppass`) and persists data via a local Docker volume.
 * **Adminer (`adminer`)**: A web-based database management interface available at `http://localhost:8080`. Log in with System `PostgreSQL`, Server `db`, and the credentials above.
 
@@ -52,12 +54,13 @@ Add `-v` to also wipe the database volume (`docker compose down -v`).
 docker compose ps
 ```
 
-The `api` service should show `8000->8000` under `PORTS`. If it only shows `8000/tcp` with no host-side mapping, the port isn't published and `localhost:8000` won't be reachable — check the `ports:` entry for `api` in `docker-compose.yml`; it should read `"8000:8000"`.
+`api1`, `api2`, `api3` are expected to show only `8000/tcp` with **no host-side mapping** — that's correct, not a bug; they're only reachable internally, through Nginx. The `nginx` service is the one that should show published ports (`0.0.0.0:8000->80/tcp` and `0.0.0.0:8443->443/tcp`); if those are missing, check the `ports:` entries for `nginx` in `compose.yaml`.
 
 Once it's up:
 
-* `http://localhost:8000/docs` — interactive API docs (Swagger UI)
-* `http://localhost:8000/health` — health check
+* `https://localhost:8443/docs` — interactive API docs (Swagger UI), served through Nginx
+* `https://localhost:8443/health` — health check (includes the responding container's instance ID)
+* `http://localhost:8000/docs` — redirects to the HTTPS URL above
 
 ## Running locally without Docker
 
@@ -106,7 +109,7 @@ Browser --[HTTPS]--> Nginx --[HTTP, internal Docker network]--> api1 / api2 / ap
 
 * Nginx's `upstream` block pools the three instances and round-robins requests across them.
 * Nginx handles TLS termination — it accepts encrypted HTTPS, decrypts it, and forwards plain HTTP internally to whichever `apiN` instance is next in rotation. The backend instances never see encrypted traffic directly.
-* Plain HTTP requests are redirected (301) to HTTPS.
+* Plain HTTP requests are redirected (`302`) to HTTPS. A temporary (`302`) rather than permanent (`301`) redirect is used deliberately during local development — browsers cache `301`s aggressively, which can hide the effect of later config changes behind a stale cached redirect. Worth switching to `301` once this config is stable and no longer actively changing.
 
 Bring it up the same way as the base stack:
 
@@ -188,6 +191,26 @@ Every push and pull request against `main` runs through a GitHub Actions pipelin
 4. **Build** — builds the Docker image and pushes it to Docker Hub.
 
 Each stage only runs if the previous one passes, so a broken lint or failing test stops the pipeline before an image is ever built or pushed. The lint, test, and scan stages install `requirements-dev.txt` (which pulls in `requirements.txt` plus `ruff`/`pytest`/`pip-audit`); the build stage's Docker image only ever installs `requirements.txt`.
+
+## Contributing
+
+`main` is protected: direct pushes are rejected, including for repo admins. All changes go through a pull request, and the four CI stages (lint, test, scan, build) must pass before the merge button is enabled.
+
+```bash
+git checkout -b my-change
+# make edits
+git add .
+git commit -m "Describe the change"
+git push -u origin my-change
+```
+
+Then open a pull request on GitHub targeting `main`. Once CI passes, merge and delete the branch (GitHub offers a one-click "Delete branch" button post-merge). Locally:
+
+```bash
+git checkout main
+git pull origin main
+git branch -d my-change
+```
 
 ## License
 
