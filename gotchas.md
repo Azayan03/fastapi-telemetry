@@ -91,7 +91,7 @@ Ran `fastapi dev` directly on the host (fish shell) while the actual app runs vi
 `conftest.py` imports `main`, which unconditionally runs `engine = create_engine(DATABASE_URL)` at module load. `DATABASE_URL` is only set inside the Docker Compose `environment:` block — running `pytest` on the bare host, the env var is unset, so `os.environ.get("DATABASE_URL")` returns `None` and `create_engine(None)` raises `ArgumentError: Expected string or URL object, got None` before any test even runs (the tests themselves never touch this `engine` — they use an in-memory SQLite session via `dependency_overrides` — but the import still fails first).
 
 - Fix used: `export DATABASE_URL="postgresql+pg8000://appuser:apppass@localhost:5432/telemetry"` before running `pytest`, purely so `create_engine()` doesn't choke on `None` at import time.
-- Better long-term fix (not yet applied): give `main.py` a safe default — `os.environ.get("DATABASE_URL", "postgresql+pg8000://appuser:apppass@localhost:5432/telemetry")` — so this doesn't need to be remembered/exported every session.
+- Better long-term fix (applied): `main.py` now uses `os.environ.get("DATABASE_URL", "postgresql+pg8000://appuser:apppass@localhost:5432/telemetry")`, so this doesn't need to be remembered/exported every session — the export above is only needed if you want to point pytest at a different DB than the default.
 
 ## `git push` fails: "No configured push destination"
 
@@ -173,3 +173,23 @@ Sent 10 sequential `curl` requests (one at a time) to a load-balanced endpoint a
 ## Fish shell doesn't support bash's `{1..N}` range or `do...done` for loops
 
 Bash's `for i in {1..10}; do ...; done` doesn't work in fish. Fish syntax is `for i in (seq 1 10) ... end` — no `do`, `end` instead of `done`, and `(seq 1 10)` instead of `{1..10}`. (Extends the earlier heredoc gotcha — fish diverges from bash/zsh in several common scripting idioms, not just heredocs.)
+
+## `async def` routes calling synchronous DB code block the event loop
+
+Every route in `main.py` was declared `async def`, but the bodies called synchronous SQLModel/pg8000 operations (`session.exec()`, `session.commit()`). FastAPI only runs plain `def` routes in a thread pool automatically — an `async def` route is expected to `await` real async I/O, so a blocking synchronous call inside one blocks the single-threaded event loop directly, stalling every other concurrent request while it runs.
+
+- Fix: changed every route from `async def` to plain `def` — FastAPI then dispatches them to its worker thread pool automatically, without needing an async DB driver.
+- Note: this only matters under real concurrent load; a solo dev hitting the API one request at a time would never notice.
+
+## Docker image ran as root; no `.dockerignore`
+
+Two related hardening gaps caught in review: the `Dockerfile` never created/switched to a non-root user (containers ran as `root` by default), and there was no `.dockerignore`, so `COPY . .` would pull in `.venv/`, `__pycache__/`, `.pytest_cache/`, and any local `database.db`/`nginx/certs` into the image.
+
+- Fix: added `addgroup`/`adduser` + `USER appuser` to the Dockerfile (after `chown -R appuser:appgroup /app`, before `CMD`), and added a `.dockerignore` excluding those paths.
+
+## `requirements.txt` was an uncurated `pip freeze`, not a direct-dependency list
+
+Root `requirements.txt` had 41 entries — including packages `main.py` never imports (`fastapi-cli`, `fastapi-cloud-cli`, `python-dotenv`, `sentry-sdk`, `watchfiles`, and a few completely unrelated ones like `asarPy`/`fastar`/`detect-installer`/`rignore` that look like leftovers from an unrelated tool's environment). A production requirements file should list direct dependencies only — pip resolves the rest.
+
+- Fix: trimmed to the 6 packages `main.py`/`Dockerfile` actually need: `fastapi`, `uvicorn`, `sqlmodel`, `pydantic`, `prometheus-fastapi-instrumentator`, `pg8000`.
+- Verify after trimming: rebuild and run the full test suite — a trim based on reading imports, not a full dependency-tree trace, so it's worth confirming nothing broke.

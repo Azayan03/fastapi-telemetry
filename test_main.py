@@ -22,6 +22,16 @@ def test_health_returns_ok(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
+# GET /metrics
+# ---------------------------------------------------------------------------
+
+def test_metrics_endpoint_available(client: TestClient):
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert "http_requests_total" in response.text
+
+
+# ---------------------------------------------------------------------------
 # GET /campaigns
 # ---------------------------------------------------------------------------
 
