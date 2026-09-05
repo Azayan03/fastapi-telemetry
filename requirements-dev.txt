@@ -2,6 +2,7 @@
 
 # Testing
 pytest
+httpx2
 
 # Linting
 ruff
