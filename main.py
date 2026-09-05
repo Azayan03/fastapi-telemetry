@@ -53,23 +53,23 @@ class Response(BaseModel, Generic[T]):
     data: T
 
 @app.get("/health")
-async def health():
+def health():
     return {"status": "ok", "instance": os.getenv("HOSTNAME")}
 
 @app.get("/campaigns", response_model=Response[list[Campaign]])
-async def read_campaigns(session: SessionDp):
+def read_campaigns(session: SessionDp):
     campaigns = session.exec(select(Campaign)).all()
     return {"data": campaigns}
 
 @app.get("/campaigns/{id}", response_model=Response[Campaign])
-async def read_campaign(id: int, session: SessionDp):
+def read_campaign(id: int, session: SessionDp):
     campaign = session.get(Campaign, id)
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return {"data": campaign}
 
 @app.post("/campaigns", response_model=Response[Campaign], status_code=201)
-async def create_campaign(campaign: CampaignCreate, session: SessionDp):
+def create_campaign(campaign: CampaignCreate, session: SessionDp):
     db_campaign = Campaign.model_validate(campaign)
     session.add(db_campaign)
     session.commit()
@@ -77,7 +77,7 @@ async def create_campaign(campaign: CampaignCreate, session: SessionDp):
     return {"data": db_campaign}
 
 @app.put("/campaigns/{id}", response_model=Response[Campaign])
-async def update_campaign(id: int, campaign: CampaignCreate, session: SessionDp):
+def update_campaign(id: int, campaign: CampaignCreate, session: SessionDp):
     data = session.get(Campaign, id)
     if not data:
         raise HTTPException(status_code=404, detail="Campaign not found")
@@ -89,7 +89,7 @@ async def update_campaign(id: int, campaign: CampaignCreate, session: SessionDp)
     return {"data": data}
 
 @app.delete("/campaigns/{id}", status_code=204)
-async def delete_campaign(id: int, session: SessionDp):
+def delete_campaign(id: int, session: SessionDp):
     data = session.get(Campaign, id)
     if not data:
         raise HTTPException(status_code=404, detail="Campaign not found")
