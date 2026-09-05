@@ -61,7 +61,7 @@ Once it's up:
 
 ## Running locally without Docker
 
-Useful for fast iteration while developing. You'll still need Postgres running somewhere — easiest is to start just the `db` service from Compose.
+Useful for fast iteration while developing. You'll still need Postgres running somewhere — easiest is to start just the `db` service from Docker Compose.
 
 ```bash
 git clone https://github.com/Azayan03/fastapi-telemetry.git
