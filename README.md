@@ -151,7 +151,7 @@ Generating the local self-signed cert (already done for this repo, kept here for
 ```bash
 mkdir -p nginx/certs
 openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout nginx/certs/nginx-privatekey.key \
+  -keyout nginx/certs/nginx-private.key \
   -out nginx/certs/nginx-cert.crt \
   -subj "/CN=localhost"
 ```
