@@ -195,6 +195,37 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  async function generateTraffic() {
+    const trafficBtn = document.getElementById('traffic-btn');
+    if (trafficBtn) {
+      trafficBtn.disabled = true;
+      trafficBtn.textContent = 'Generating...';
+    }
+
+    const tasks = [
+      apiFetch('/health'),
+      apiFetch('/campaigns'),
+      apiFetch('/health'),
+      apiFetch('/campaigns'),
+      apiFetch('/health'),
+      apiFetch('/campaigns/1'),
+      apiFetch('/campaigns/2'),
+      apiFetch('/health'),
+      apiFetch('/campaigns'),
+      apiFetch('/health')
+    ];
+
+    await Promise.allSettled(tasks);
+
+    if (trafficBtn) {
+      trafficBtn.disabled = false;
+      trafficBtn.textContent = 'Generate Traffic (10x)';
+    }
+    showToast('Generated 10 requests! Check Grafana, Prometheus, and Jaeger.');
+    await loadCampaigns();
+    await updateHealth();
+  }
+
   // Event Listeners
   createForm.addEventListener('submit', createCampaign);
   refreshBtn.addEventListener('click', () => {
@@ -202,6 +233,10 @@ document.addEventListener('DOMContentLoaded', () => {
     updateHealth();
   });
   pingBtn.addEventListener('click', testRoundRobin);
+  const trafficBtn = document.getElementById('traffic-btn');
+  if (trafficBtn) {
+    trafficBtn.addEventListener('click', generateTraffic);
+  }
   clearLogsBtn.addEventListener('click', () => {
     requestLog.innerHTML = '<div class="empty-log">Log cleared. Make requests to view telemetry events.</div>';
   });
