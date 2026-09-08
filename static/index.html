@@ -26,6 +26,7 @@
           <span id="instance-name" class="instance-badge">Detecting instance...</span>
         </div>
         <button id="ping-btn" class="btn btn-sm btn-outline">Test Round Robin</button>
+        <button id="traffic-btn" class="btn btn-sm btn-primary">Generate Traffic (10x)</button>
       </div>
     </header>
 
@@ -33,13 +34,13 @@
     <section class="observability-bar">
       <div class="obs-title">Observability Tools:</div>
       <div class="obs-links">
-        <a href="http://localhost:3000" target="_blank" class="obs-badge grafana" title="Open Grafana Dashboards">
-          <span class="obs-icon">📈</span> Grafana (3000)
+        <a href="http://localhost:3000/d/fastapi-telemetry-overview/fastapi-telemetry-overview?orgId=1&refresh=5s" target="_blank" class="obs-badge grafana" title="Open Grafana FastAPI Dashboard">
+          <span class="obs-icon">📈</span> Grafana Dashboard (3000)
         </a>
-        <a href="http://localhost:9090" target="_blank" class="obs-badge prometheus" title="Open Prometheus UI">
-          <span class="obs-icon">📊</span> Prometheus (9090)
+        <a href="http://localhost:9090/query?g0.expr=http_requests_total&g0.tab=0" target="_blank" class="obs-badge prometheus" title="Open Prometheus Graph">
+          <span class="obs-icon">📊</span> Prometheus Metrics (9090)
         </a>
-        <a href="http://localhost:16686" target="_blank" class="obs-badge jaeger" title="Open Jaeger Tracing">
+        <a href="http://localhost:16686/search?service=fastapi-telemetry&lookback=1h" target="_blank" class="obs-badge jaeger" title="Open Jaeger Traces">
           <span class="obs-icon">🔍</span> Jaeger Traces (16686)
         </a>
         <a href="/docs" target="_blank" class="obs-badge swagger" title="Interactive API Docs">

@@ -17,7 +17,7 @@
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -42,7 +42,7 @@
       "pluginVersion": "10.4.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
           "expr": "sum(http_requests_total) or vector(0)",
           "instant": false,
@@ -54,7 +54,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -79,9 +79,9 @@
       "pluginVersion": "10.4.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sum(http_requests_total{status=~\"2..\"}) or vector(0)",
+          "expr": "sum(http_requests_total{status=~\"2.*\"}) or vector(0)",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -91,7 +91,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -119,9 +119,9 @@
       "pluginVersion": "10.4.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sum(http_requests_total{status=~\"[45]..\"}) or vector(0)",
+          "expr": "sum(http_requests_total{status=~\"[45].*\"}) or vector(0)",
           "instant": false,
           "range": true,
           "refId": "A"
@@ -131,7 +131,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "thresholds" },
@@ -159,7 +159,7 @@
       "pluginVersion": "10.4.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
           "expr": "count(up{job=\"fastapi-backend\"} == 1)",
           "instant": true,
@@ -171,7 +171,7 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -185,7 +185,7 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
           "expr": "sum by (instance) (rate(http_requests_total[1m]))",
           "legendFormat": "{{instance}}",
@@ -197,7 +197,7 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -211,7 +211,7 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom" } },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
           "expr": "sum by (handler) (rate(http_requests_total[1m]))",
           "legendFormat": "{{handler}}",
@@ -231,5 +231,5 @@
   "timezone": "browser",
   "title": "FastAPI Telemetry Overview",
   "uid": "fastapi-telemetry-overview",
-  "version": 1
+  "version": 2
 }
