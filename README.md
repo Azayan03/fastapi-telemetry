@@ -5,11 +5,15 @@ A small FastAPI service demonstrating a REST API with built-in observability via
 ## Features
 
 * CRUD API for managing `Campaign` records (create, read, update, delete)
+* Interactive Web Frontend directly served at `/` and `/ui` with live cluster instance monitor
 * PostgreSQL database with [SQLModel](https://sqlmodel.tiangolo.com/) as the ORM
 * Automatic Prometheus metrics exposed via [`prometheus-fastapi-instrumentator`](https://github.com/trallnag/prometheus-fastapi-instrumentator)
+* Distributed Tracing via OpenTelemetry (`opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-instrumentation-fastapi`, `opentelemetry-instrumentation-sqlalchemy`) exported to Jaeger
+* Prometheus service scraping all load-balanced backend instances automatically
+* Grafana service with pre-provisioned datasources (Prometheus, Jaeger) and a pre-configured dashboard
 * Seeded sample data on startup
 * Health check endpoint
-* Fully containerized — API, database, and DB admin UI all run via Docker Compose
+* Fully containerized — API, database, DB admin UI, Nginx load balancer, Prometheus, Grafana, and Jaeger all run via Docker Compose
 * Docker image runs as a dedicated non-root user, not `root`
 
 ## Requirements
@@ -19,7 +23,7 @@ A small FastAPI service demonstrating a REST API with built-in observability via
 
 ## Running with Docker (recommended)
 
-This starts the whole stack — three load-balanced API instances, the database, Adminer, and Nginx (reverse proxy, load balancing, HTTPS) — together.
+This starts the whole stack — three load-balanced API instances, the database, Adminer, Nginx (reverse proxy, load balancing, HTTPS), Prometheus, Grafana, and Jaeger — together.
 
 ```bash
 git clone https://github.com/Azayan03/fastapi-telemetry.git
@@ -30,9 +34,12 @@ docker compose up --build
 First run takes a bit longer while the `api1`/`api2`/`api3` images build and dependencies install. Subsequent runs reuse the cached layer and start much faster.
 
 * **API (`api1`, `api2`, `api3`)**: Three identical FastAPI instances, load-balanced by Nginx. They don't publish a host port individually by design — all traffic goes through Nginx (see below).
-* **Nginx (`nginx`)**: Reverse proxy, load balancer, and TLS termination in front of the three API instances. This is the actual entry point — see [Reverse proxy, load balancing, and HTTPS](#reverse-proxy-load-balancing-and-https-nginx) below for details and access URLs.
+* **Nginx (`nginx`)**: Reverse proxy, load balancer, and TLS termination in front of the three API instances. This is the entry point for frontend and API traffic.
 * **Database (`db`)**: A PostgreSQL 16 instance accessible on port `5432`. It automatically provisions a database named `telemetry` (User: `appuser`, Password: `apppass`) and persists data via a local Docker volume.
 * **Adminer (`adminer`)**: A web-based database management interface available at `http://localhost:8080`. Log in with System `PostgreSQL`, Server `db`, and the credentials above.
+* **Prometheus (`prometheus`)**: Scrapes `/metrics` from all backend API instances every 5s, available at `http://localhost:9090`.
+* **Grafana (`grafana`)**: Pre-configured dashboards and Prometheus + Jaeger datasources at `http://localhost:3000` (User: `admin`, Password: `admin`).
+* **Jaeger (`jaeger`)**: Distributed tracing UI and OTLP collector endpoint at `http://localhost:16686` (OTLP gRPC port: `4317`).
 
 To run in the background, add `-d`:
 
@@ -46,7 +53,7 @@ To stop everything:
 docker compose down
 ```
 
-Add `-v` to also wipe the database volume (`docker compose down -v`).
+Add `-v` to also wipe the database and monitoring volumes (`docker compose down -v`).
 
 ### Verifying it's up
 
@@ -54,13 +61,15 @@ Add `-v` to also wipe the database volume (`docker compose down -v`).
 docker compose ps
 ```
 
-`api1`, `api2`, `api3` are expected to show only `8000/tcp` with **no host-side mapping** — that's correct, not a bug; they're only reachable internally, through Nginx. The `nginx` service is the one that should show published ports (`0.0.0.0:8000->80/tcp` and `0.0.0.0:8443->443/tcp`); if those are missing, check the `ports:` entries for `nginx` in `compose.yaml`.
+Once it's up, open the following endpoints:
 
-Once it's up:
-
-* `https://localhost:8443/docs` — interactive API docs (Swagger UI), served through Nginx
-* `https://localhost:8443/health` — health check (includes the responding container's instance ID)
-* `http://localhost:8000/docs` — redirects to the HTTPS URL above
+* **Web Frontend**: `https://localhost:8443/` or `https://localhost:8443/ui` (or `http://localhost:8000/` which redirects to HTTPS) — interactive campaign UI with live round-robin instance testing
+* **Interactive API Docs**: `https://localhost:8443/docs` (Swagger UI)
+* **Health Check**: `https://localhost:8443/health`
+* **Grafana Dashboards**: `http://localhost:3000` (login: `admin` / `admin`)
+* **Prometheus Targets & Metrics**: `http://localhost:9090` (Targets at `http://localhost:9090/targets`)
+* **Jaeger Traces**: `http://localhost:16686`
+* **Adminer DB UI**: `http://localhost:8080`
 
 ## Running locally without Docker
 
@@ -161,9 +170,38 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
 
 `nginx/certs/` is gitignored — regenerate locally rather than relying on a committed cert/key.
 
-## Metrics
+## Web Frontend
 
-Prometheus metrics are automatically exposed at `/metrics`, ready to be scraped by a Prometheus server.
+A responsive dark-mode Single Page Application is served directly at `/` and `/ui`:
+
+* **URL**: `https://localhost:8443/` or `http://localhost:8000/` (or `http://localhost:8000/` when running outside Docker)
+* **Features**:
+  * **Campaign Management**: View live campaigns, create new ones, and delete campaigns.
+  * **Cluster Round-Robin Tester**: "Test Round Robin" button fires concurrent health checks to dynamically show which container instance (`api1`, `api2`, `api3`) responds.
+  * **Observability Hub**: Quick-launch buttons directly to Grafana (`:3000`), Prometheus (`:9090`), Jaeger (`:16686`), Swagger Docs (`/docs`), and Adminer (`:8080`).
+  * **Real-time Request Log**: Displays API calls, latency measurements, and HTTP status codes in real-time.
+
+## Prometheus Metrics & Grafana
+
+* **Prometheus**:
+  * Runs on port `9090` (`http://localhost:9090`).
+  * Automatic scrape configuration (`prometheus/prometheus.yml`) polls all three backend API instances (`api1:8000`, `api2:8000`, `api3:8000`) at `/metrics` every 5 seconds.
+  * Check scrape health and target status at `http://localhost:9090/targets`.
+* **Grafana**:
+  * Runs on port `3000` (`http://localhost:3000`), default login: `admin` / `admin`.
+  * Pre-provisioned datasources: Prometheus (`http://prometheus:9090`) and Jaeger (`http://jaeger:16686`).
+  * Pre-provisioned dashboard: **FastAPI Telemetry Overview** displaying total requests, error rates, request duration, and traffic distribution across instances.
+
+## Distributed Tracing with OpenTelemetry & Jaeger
+
+* **OpenTelemetry Instrumentation**:
+  * Integrated via `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-instrumentation-fastapi`, and `opentelemetry-instrumentation-sqlalchemy`.
+  * Every HTTP request produces an OpenTelemetry trace context.
+  * Database queries generated by SQLModel/SQLAlchemy are automatically instrumented as child spans within the request trace.
+  * Spans are batched and exported asynchronously via OTLP gRPC to Jaeger on port `4317`.
+* **Jaeger UI**:
+  * Access the Jaeger trace exploration UI at `http://localhost:16686`.
+  * Select service `fastapi-telemetry` to view distributed traces, inspect spans, latency breakdowns, and query executions.
 
 ## Running tests
 

@@ -27,25 +27,37 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+pg8000://appuser:apppass@db:5432/telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: fastapi-telemetry
     depends_on:
       db:
         condition: service_healthy
+      jaeger:
+        condition: service_started
 
   api2:
     build: .
     environment:
       DATABASE_URL: postgresql+pg8000://appuser:apppass@db:5432/telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: fastapi-telemetry
     depends_on:
       db:
         condition: service_healthy
+      jaeger:
+        condition: service_started
 
   api3:
     build: .
     environment:
       DATABASE_URL: postgresql+pg8000://appuser:apppass@db:5432/telemetry
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+      OTEL_SERVICE_NAME: fastapi-telemetry
     depends_on:
       db:
         condition: service_healthy
+      jaeger:
+        condition: service_started
         
   nginx:
     image: nginx:latest
@@ -60,5 +72,49 @@ services:
       - api2
       - api3
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    restart: unless-stopped
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    depends_on:
+      - api1
+      - api2
+      - api3
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+
 volumes:
   pg_data:
+  prometheus_data:
+  grafana_data:

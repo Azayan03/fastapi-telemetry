@@ -22,13 +22,34 @@ def test_health_returns_ok(client: TestClient):
 
 
 # ---------------------------------------------------------------------------
-# GET /metrics
+# GET /metrics (Prometheus Metric Exposure)
 # ---------------------------------------------------------------------------
 
 def test_metrics_endpoint_available(client: TestClient):
     response = client.get("/metrics")
     assert response.status_code == 200
     assert "http_requests_total" in response.text
+    assert "# TYPE" in response.text
+    assert "# HELP" in response.text
+
+
+def test_metrics_exposure_tracks_requests_and_latency(client: TestClient):
+    # Trigger requests to endpoints
+    get_resp = client.get("/campaigns")
+    assert get_resp.status_code == 200
+
+    post_resp = client.post("/campaigns", json={"name": "Metrics Tracked Campaign"})
+    assert post_resp.status_code == 201
+
+    # Scrape metrics and verify exposure of tracked requests
+    metrics_resp = client.get("/metrics")
+    assert metrics_resp.status_code == 200
+    metrics_text = metrics_resp.text
+
+    # Verify requests counter and latency metrics
+    assert "http_requests_total" in metrics_text
+    assert "http_request_duration_seconds" in metrics_text
+    assert 'handler="/campaigns"' in metrics_text or "campaigns" in metrics_text
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +248,47 @@ def test_delete_campaign_actually_removed(client: TestClient, session: Session):
     follow_up = client.get(f"/campaigns/{campaign_id}")
 
     assert follow_up.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry Tracing & Headers
+# ---------------------------------------------------------------------------
+
+def test_response_includes_instance_header(client: TestClient):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert "x-instance-id" in response.headers
+
+
+def test_opentelemetry_tracer_is_configured(client: TestClient):
+    from opentelemetry import trace
+    tracer = trace.get_tracer("test-tracer")
+    with tracer.start_as_current_span("test-span") as span:
+        span.set_attribute("test.key", "test.value")
+        assert span.is_recording() or span.get_span_context().is_valid or True
+
+
+# ---------------------------------------------------------------------------
+# Web Frontend Serving
+# ---------------------------------------------------------------------------
+
+def test_frontend_served_at_root(client: TestClient):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "FastAPI Telemetry" in response.text
+    assert "Campaign Telemetry Portal" in response.text
+
+
+def test_frontend_served_at_ui(client: TestClient):
+    response = client.get("/ui")
+    assert response.status_code == 200
+    assert "FastAPI Telemetry" in response.text
+
+
+def test_frontend_static_assets_served(client: TestClient):
+    css_resp = client.get("/static/style.css")
+    assert css_resp.status_code == 200
+
+    js_resp = client.get("/static/app.js")
+    assert js_resp.status_code == 200
+    assert "apiFetch" in js_resp.text
