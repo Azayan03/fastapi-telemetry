@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campaign Telemetry Portal</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation / Header -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="logo-icon">⚡</div>
+        <div>
+          <h1>FastAPI Telemetry</h1>
+          <span class="subtext">Distributed Tracing & Metrics Dashboard</span>
+        </div>
+      </div>
+      <div class="cluster-status">
+        <div class="status-indicator">
+          <span class="pulse-dot"></span>
+          <span id="instance-name" class="instance-badge">Detecting instance...</span>
+        </div>
+        <button id="ping-btn" class="btn btn-sm btn-outline">Test Round Robin</button>
+      </div>
+    </header>
+
+    <!-- Observability Hub Links -->
+    <section class="observability-bar">
+      <div class="obs-title">Observability Tools:</div>
+      <div class="obs-links">
+        <a href="http://localhost:3000" target="_blank" class="obs-badge grafana" title="Open Grafana Dashboards">
+          <span class="obs-icon">📈</span> Grafana (3000)
+        </a>
+        <a href="http://localhost:9090" target="_blank" class="obs-badge prometheus" title="Open Prometheus UI">
+          <span class="obs-icon">📊</span> Prometheus (9090)
+        </a>
+        <a href="http://localhost:16686" target="_blank" class="obs-badge jaeger" title="Open Jaeger Tracing">
+          <span class="obs-icon">🔍</span> Jaeger Traces (16686)
+        </a>
+        <a href="/docs" target="_blank" class="obs-badge swagger" title="Interactive API Docs">
+          <span class="obs-icon">📖</span> Swagger Docs
+        </a>
+        <a href="http://localhost:8080" target="_blank" class="obs-badge adminer" title="Postgres Adminer">
+          <span class="obs-icon">🗄️</span> Adminer (8080)
+        </a>
+      </div>
+    </section>
+
+    <!-- Main Content Layout -->
+    <main class="main-layout">
+      <!-- Left Column: Campaign Form & Telemetry Activity -->
+      <div class="column-sidebar">
+        <div class="card">
+          <div class="card-header">
+            <h2>Create Campaign</h2>
+            <span class="card-subtitle">Triggers POST /campaigns (DB + OTel Span)</span>
+          </div>
+          <form id="create-campaign-form">
+            <div class="form-group">
+              <label for="campaign-name">Campaign Name</label>
+              <input type="text" id="campaign-name" placeholder="e.g. Cyber Monday Blitz" required>
+            </div>
+            <div class="form-group">
+              <label for="campaign-due">Due Date</label>
+              <input type="datetime-local" id="campaign-due">
+            </div>
+            <button type="submit" class="btn btn-primary btn-block" id="submit-campaign-btn">
+              <span>Create Campaign</span>
+            </button>
+          </form>
+        </div>
+
+        <div class="card info-card">
+          <div class="card-header">
+            <h2>Distributed Telemetry Info</h2>
+          </div>
+          <p class="text-muted">Every request from this UI flows through:</p>
+          <ol class="flow-steps">
+            <li><strong>Nginx:</strong> TLS Termination & Round-Robin</li>
+            <li><strong>FastAPI:</strong> Request trace context generated</li>
+            <li><strong>SQLModel / Postgres:</strong> Query span captured</li>
+            <li><strong>Jaeger / OTel:</strong> Exported via OTLP gRPC</li>
+            <li><strong>Prometheus:</strong> Scraped at <code>/metrics</code></li>
+          </ol>
+        </div>
+      </div>
+
+      <!-- Right Column: Campaigns Table & Activity Feed -->
+      <div class="column-main">
+        <div class="card">
+          <div class="card-header flex-between">
+            <div>
+              <h2>Active Campaigns</h2>
+              <span class="card-subtitle" id="campaign-count">Loading campaigns...</span>
+            </div>
+            <div class="actions">
+              <button id="refresh-btn" class="btn btn-secondary btn-sm">Refresh</button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Due Date</th>
+                  <th>Created At</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="campaigns-tbody">
+                <tr>
+                  <td colspan="5" class="text-center">Loading campaigns...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Telemetry Activity Log -->
+        <div class="card">
+          <div class="card-header flex-between">
+            <div>
+              <h2>Recent API Requests & Traces</h2>
+              <span class="card-subtitle">Live request monitor with latency</span>
+            </div>
+            <button id="clear-logs-btn" class="btn btn-sm btn-outline">Clear</button>
+          </div>
+          <div id="request-log" class="request-log">
+            <div class="empty-log">No requests recorded yet. Click buttons above to generate traffic!</div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

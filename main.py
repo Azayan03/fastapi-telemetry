@@ -4,12 +4,16 @@ from datetime import datetime, timezone
 from typing import Annotated, Generic, TypeVar
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
+from telemetry import setup_telemetry
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql+pg8000://appuser:apppass@localhost:5432/telemetry")
 engine = create_engine(DATABASE_URL)
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
@@ -46,6 +50,28 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(root_path="/api/v1", lifespan=lifespan)
 Instrumentator().instrument(app).expose(app)
+setup_telemetry(app, engine)
+
+@app.middleware("http")
+async def add_instance_header(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Instance-ID"] = os.getenv("HOSTNAME", "localhost")
+    return response
+
+@app.get("/", response_class=FileResponse)
+@app.get("/ui", response_class=FileResponse)
+def serve_frontend():
+    index_file = os.path.join(STATIC_DIR, "index.html")
+    if os.path.exists(index_file):
+        return FileResponse(index_file)
+    return {"status": "ok", "message": "FastAPI Telemetry Service"}
+
+@app.get("/static/{file_path:path}")
+def serve_static(file_path: str):
+    file = os.path.join(STATIC_DIR, file_path)
+    if os.path.isfile(file):
+        return FileResponse(file)
+    raise HTTPException(status_code=404, detail="File not found")
 
 
 T = TypeVar("T")
